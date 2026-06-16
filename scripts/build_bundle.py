@@ -1,30 +1,25 @@
 """
 Gera public/bundle.json (core) e public/turmas.json (lazy) da Prova Paulista B2.
 
-IMPORTANTE — denominador / "total esperado":
-    O export do B2 (CSV) só lista turmas que JÁ começaram a subir cartões
-    (toda linha tem gabaritos_lidos_cmspp > 0). As turmas que ainda não
-    iniciaram NÃO estão no arquivo. Se somássemos só o que está no CSV, o
-    "total de alunos esperado" ficaria subdimensionado (~794 mil) e o "% Dia N"
-    ficaria inflado.
+DENOMINADOR / "total esperado" — dois modos (auto-detectado):
 
-    Denominador (esperado por turma), híbrido:
-      - turma presente no B2 -> usa o esperado do PRÓPRIO B2 (Total_Alunos_Turma);
-      - turma só no universo  -> usa o esperado do B1 (`scripts/universe.json`,
-        materializado do ppb1: ~82.392 turmas / ~2,63 mi alunos).
-    99,8% das turmas do B2 casam por turma_id = md5(ure|escola|turma) com o
-    universo, e o esperado B2 vs B1 nas mesmas turmas difere só ~1% — então o
-    B1 é uma boa estimativa para as ~57,5k turmas que ainda não viraram linha.
+  1) BASE COMPLETA (preferido): o export já traz TODAS as turmas, inclusive as
+     pendentes (com leitura 0). Nesse caso o denominador sai 100% do próprio B2
+     (coluna Total_Alunos_Turma). Detectado quando o nº de turmas do arquivo é
+     próximo do universo (>= 70% de `scripts/universe.json`).
 
-    Resultado: %DiaN = lidos (do B2) / alunos esperados. Turmas ainda sem
-    leitura aparecem com 0% (pendentes).
+  2) BASE SÓ COM ATIVAS (fallback): exports antigos do B2 só listavam turmas que
+     já tinham começado a subir cartões (toda linha com leitura > 0). Aí o total
+     ficaria subdimensionado, então hibridizamos: esperado do próprio B2 nas
+     turmas presentes + esperado do B1 (`scripts/universe.json`, ~82k turmas /
+     2,63 mi) nas pendentes. 99,8% casam por turma_id = md5(ure|escola|turma).
 
-bundle.json é baixado em todo carregamento (RESUMO/SEDUC/URE).
-turmas.json só é baixado quando o usuário entra na aba ESCOLA.
+Lê os dois dias (DIA_PROVA 1 e 2) do mesmo CSV. Linhas sem dia válido são lixo
+e são descartadas.
 
 Uso:
     python scripts/build_bundle.py
-    CSV_DIA1=".../Dia 1-....csv" STAMP_BRT="2026-06-16 15:00" python scripts/build_bundle.py
+    CSV_DIA1=".../Dia 1-....csv" STAMP_BRT="2026-06-16 17:00" python scripts/build_bundle.py
 """
 import glob
 import hashlib
@@ -59,13 +54,10 @@ def latest(pattern):
 
 CSV_DIA1 = os.environ.get("CSV_DIA1") or latest("*Dia 1*.csv")
 CSV_DIA2 = os.environ.get("CSV_DIA2") or latest("*Dia 2*.csv")
-STAMP_BRT = os.environ.get("STAMP_BRT")  # ex.: "2026-06-16 15:00"
+STAMP_BRT = os.environ.get("STAMP_BRT")  # ex.: "2026-06-16 17:00"
 
 if not CSV_DIA1:
     print("ERRO: nenhum CSV 'Dia 1' encontrado (defina CSV_DIA1)", file=sys.stderr)
-    sys.exit(1)
-if not UNIVERSE.exists():
-    print(f"ERRO: universo não encontrado em {UNIVERSE}", file=sys.stderr)
     sys.exit(1)
 
 # ---------------------------------------------------------------- carregar CSV
@@ -92,99 +84,93 @@ def derive_serie(np_text):
     return f"{n}EF" if "ano" in np_text.lower() else f"{n}EM"
 
 
-def load(path, expect_dia):
-    print(f"[ler] dia {expect_dia}: {path}")
+def load_all(path):
     df = pd.read_csv(path, encoding="utf-8", low_memory=False)
-    print(f"       {len(df):,} linhas brutas")
     keep = [c for c in RENAME if c in df.columns]
     df = df[keep].rename(columns=RENAME)
-    before = len(df)
-    df = df[df["dia_prova"] == expect_dia]
-    if len(df) != before:
-        print(f"       filtro dia_prova={expect_dia}: {before:,} -> {len(df):,}")
+    df["dia_prova"] = pd.to_numeric(df["dia_prova"], errors="coerce")
+    n0 = len(df)
+    df = df[df["dia_prova"].isin([1, 2])].copy()  # descarta linhas sem dia (lixo)
+    print(f"[ler] {os.path.basename(path)}: {n0:,} linhas -> {len(df):,} (dias 1/2)")
     return df
 
 
 t0 = time.time()
-parts = [load(CSV_DIA1, 1)]
-if CSV_DIA2:
-    parts.append(load(CSV_DIA2, 2))
+parts = [load_all(CSV_DIA1)]
+if CSV_DIA2 and os.path.abspath(CSV_DIA2) != os.path.abspath(CSV_DIA1):
+    parts.append(load_all(CSV_DIA2))
 df = pd.concat(parts, ignore_index=True)
-print(f"[concat] {len(df):,} linhas")
 
 # serie a partir do primeiro nome_prova não-nulo
 np_cols = [c for c in ["_np_roxo", "_np_laranja", "_np_verde", "_np_amarela"] if c in df.columns]
 df["_nome_prova"] = df[np_cols].bfill(axis=1).iloc[:, 0] if np_cols else None
 df["serie"] = df["_nome_prova"].map(derive_serie)
 
-for c in ["dia_prova", "total_alunos_turma", "gabaritos_lidos_cmspp"]:
-    df[c] = pd.to_numeric(df[c], errors="coerce")
+df["total_alunos_turma"] = pd.to_numeric(df["total_alunos_turma"], errors="coerce")
+df["gabaritos_lidos_cmspp"] = pd.to_numeric(df["gabaritos_lidos_cmspp"], errors="coerce")
+df["dia_prova"] = df["dia_prova"].astype(int)
+df = df.dropna(subset=["ure", "escola", "turma"])
 
-df = df.dropna(subset=["ure", "escola", "turma", "dia_prova"])
 # dedup (ure,escola,turma,dia_prova) — mantém a última
 key = ["ure", "escola", "turma", "dia_prova"]
 dups = int(df.duplicated(subset=key, keep=False).sum())
 if dups:
     df = df.drop_duplicates(subset=key, keep="last")
-    print(f"[dedup] {dups:,} linhas duplicadas -> {len(df):,}")
+    print(f"[dedup] {dups:,} linhas duplicadas removidas -> {len(df):,}")
 
 
 def md5(*parts):
     return hashlib.md5("|".join(parts).encode("utf-8")).hexdigest()
 
 
+df["escola_id"] = [md5(u, e) for u, e in zip(df["ure"], df["escola"])]
 df["turma_id"] = [md5(u, e, t) for u, e, t in zip(df["ure"], df["escola"], df["turma"])]
-df["lidos_int"] = df["gabaritos_lidos_cmspp"].fillna(0).astype(int)
+df["_alunos"] = df["total_alunos_turma"].fillna(0).astype(int)
+lidos = df["gabaritos_lidos_cmspp"].fillna(0).astype(int)
+df["_l1"] = lidos.where(df["dia_prova"] == 1, 0)
+df["_l2"] = lidos.where(df["dia_prova"] == 2, 0)
 
-# leituras do B2 por turma_id (lidos por dia)
-reads = {}  # turma_id -> {"d1": x, "d2": y}
-for r in df.itertuples(index=False):
-    e = reads.setdefault(r.turma_id, {"d1": 0, "d2": 0})
-    e["d1" if r.dia_prova == 1 else "d2"] += r.lidos_int
+# --------------------------------------------------- agregação por turma (B2)
+por = df.groupby(["ure", "escola_id", "turma_id"], sort=False).agg(
+    escola=("escola", "max"),
+    turma=("turma", "max"),
+    serie=("serie", "max"),
+    alunos=("_alunos", "max"),       # mesmo aluno serve aos dois dias
+    lidos_d1=("_l1", "sum"),
+    lidos_d2=("_l2", "sum"),
+).reset_index()
 
-# turmas do B2 (para detectar as que não estão no universo)
-b2_turmas = {}
-for r in df.itertuples(index=False):
-    b2_turmas.setdefault(r.turma_id, {
-        "ure": r.ure, "escola": r.escola, "escola_id": md5(r.ure, r.escola),
-        "turma": r.turma, "serie": r.serie,
-        "alunos": int(r.total_alunos_turma) if pd.notna(r.total_alunos_turma) else 0,
-    })
+# ------------------------------------------------------ modo do denominador
+universe = json.loads(UNIVERSE.read_text(encoding="utf-8")) if UNIVERSE.exists() else []
+uni_size = len(universe) or 82000
+base_completa = len(por) >= 0.70 * uni_size
 
-# ---------------------------------------------------------- universo (esperado)
-universe = json.loads(UNIVERSE.read_text(encoding="utf-8"))
-uni_ids = {u["turma_id"] for u in universe}
+if base_completa:
+    pt = por.copy()
+    print(f"[modo] BASE COMPLETA — denominador 100% do B2 ({len(pt):,} turmas)")
+else:
+    # fallback híbrido: universo do B1 + leituras/esperado do B2 onde houver
+    uni_ids = {u["turma_id"] for u in universe}
+    by_id = {u["turma_id"]: {**u, "lidos_d1": 0, "lidos_d2": 0} for u in universe}
+    for r in por.itertuples(index=False):
+        if r.turma_id in by_id:
+            row = by_id[r.turma_id]
+            row["alunos"] = int(r.alunos) or row["alunos"]
+            row["lidos_d1"], row["lidos_d2"] = int(r.lidos_d1), int(r.lidos_d2)
+            if not row.get("serie") and pd.notna(r.serie):
+                row["serie"] = r.serie
+        else:
+            by_id[r.turma_id] = {
+                "ure": r.ure, "escola": r.escola, "escola_id": r.escola_id,
+                "turma_id": r.turma_id, "turma": r.turma,
+                "serie": r.serie if pd.notna(r.serie) else None,
+                "alunos": int(r.alunos), "lidos_d1": int(r.lidos_d1), "lidos_d2": int(r.lidos_d2),
+            }
+    pt = pd.DataFrame(list(by_id.values()))
+    b2_only = sum(1 for r in por.itertuples(index=False) if r.turma_id not in uni_ids)
+    print(f"[modo] HÍBRIDO (base só com ativas) — B2 {len(por):,} "
+          f"(+{b2_only} fora do universo) sobre universo B1 {len(universe):,}")
 
-# Esperado por turma (denominador):
-#   - turma presente no B2  -> usa o esperado do PRÓPRIO B2 (Total_Alunos_Turma)
-#   - turma só no universo  -> usa o esperado do B1 (melhor estimativa p/ pendentes)
-# Leituras (lidos) sempre vêm do B2 (0 nas turmas ainda sem atividade).
-by_id = {u["turma_id"]: {**u, "lidos_d1": 0, "lidos_d2": 0} for u in universe}
-
-for tid, t in b2_turmas.items():
-    rd = reads.get(tid, {"d1": 0, "d2": 0})
-    if tid in by_id:
-        row = by_id[tid]
-        row["alunos"] = t["alunos"] or row["alunos"]   # esperado do B2 (B1 se B2 vier 0)
-        row["lidos_d1"], row["lidos_d2"] = rd["d1"], rd["d2"]
-        if not row.get("serie") and t["serie"]:
-            row["serie"] = t["serie"]
-    else:
-        by_id[tid] = {
-            "ure": t["ure"], "escola": t["escola"], "escola_id": t["escola_id"],
-            "turma_id": tid, "turma": t["turma"], "serie": t["serie"],
-            "alunos": t["alunos"], "lidos_d1": rd["d1"], "lidos_d2": rd["d2"],
-        }
-
-pt = pd.DataFrame(list(by_id.values()))
-b2_only = [tid for tid in b2_turmas if tid not in uni_ids]
-matched = len(b2_turmas) - len(b2_only)
-pendentes = len(universe) - matched
-print(f"[merge] universo {len(universe):,} | B2 ativas {len(b2_turmas):,} "
-      f"(casadas {matched:,} + fora do universo {len(b2_only):,}) | "
-      f"pendentes {pendentes:,} | total {len(pt):,}")
-
-# alunos esperados valem para os dois dias (toda turma faz D1 e D2)
 pt["alunos"] = pt["alunos"].fillna(0).astype(int)
 pt["lidos_d1"] = pt["lidos_d1"].astype(int)
 pt["lidos_d2"] = pt["lidos_d2"].astype(int)
@@ -265,8 +251,8 @@ for r in pt.sort_values("turma").itertuples(index=False):
 if STAMP_BRT:
     atualizacao_iso = STAMP_BRT.strip().replace(" ", "T") + ":00-03:00"
 else:
-    raw = pd.to_datetime(df["atualizacao"], errors="coerce").max()
-    atualizacao_iso = (raw.strftime("%Y-%m-%dT%H:%M:%S") + "-03:00") if pd.notna(raw) else None
+    raw = pd.to_datetime(df["atualizacao"], errors="coerce", utc=True).max()
+    atualizacao_iso = raw.tz_convert("America/Sao_Paulo").isoformat() if pd.notna(raw) else None
 
 # ----------------------------------------------------------------- escrever
 bundle = {"atualizacao": atualizacao_iso, "summary": summary,
