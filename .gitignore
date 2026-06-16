@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.env.local
+.vercel
+*.log
+.DS_Store
+
+.vercel
+.refresh-state.json
+.claude/
+__pycache__/
+
+# arquivo solto pré-existente, não faz parte do projeto
+turmas.csv

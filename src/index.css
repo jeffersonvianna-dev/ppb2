@@ -1,0 +1,139 @@
+:root {
+  --blue:         #005BAC;
+  --blue-dark:    #003B78;
+  --blue-pale:    #e8f0f9;
+  --blue-mid:     #b8d2ee;
+  --orange:       #F47920;
+  --gray:         #f5f6fa;
+  --gray-mid:     #c8cfdb;
+  --text:         #0b1020;
+  --text-strong:  #0b1020;
+  --text-muted:   #3f4a5f;
+  --white:        #ffffff;
+  --green:        #0f9a68;
+  --yellow:       #c77a00;
+  --red:          #c62828;
+  --radius:       12px;
+  --shadow:       0 2px 12px rgba(0,0,0,.08);
+  --shadow-lg:    0 4px 24px rgba(0,0,0,.14);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--gray);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+}
+
+.header { background: var(--blue); box-shadow: var(--shadow); position: sticky; top: 0; z-index: 10; }
+.header-inner { max-width: 1300px; margin: 0 auto; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.header-title h1 { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: var(--white); line-height: 1.1; }
+.header-title p { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,.92); margin-top: 3px; }
+.header-stamp { font-size: 13px; color: rgba(255,255,255,.85); white-space: nowrap; }
+.header-stamp strong { color: var(--white); }
+
+.page { max-width: 1300px; margin: 0 auto; padding: 28px 24px; }
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
+.card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; border-left: 4px solid var(--blue); }
+.card-label { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-strong); margin-bottom: 8px; }
+.card-value { font-size: 32px; font-weight: 900; letter-spacing: -0.03em; color: var(--blue-dark); line-height: 1; }
+.card-meta { font-size: 12px; color: var(--text-muted); margin-top: 8px; font-weight: 500; }
+
+.table-section { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.table-top { padding: 16px 20px; border-bottom: 1px solid var(--gray-mid); display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.tabs { display: flex; gap: 6px; }
+.tab-button { height: 40px; padding: 0 20px; border: 1px solid var(--gray-mid); border-radius: 8px; background: transparent; color: var(--text-strong); font: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; transition: all .15s; }
+.tab-button.active { background: var(--blue); border-color: var(--blue); color: var(--white); }
+.tab-button:not(.active):hover { border-color: var(--blue); color: var(--blue); }
+.table-filters { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+
+.table-subheader { padding: 10px 20px; font-size: 13px; color: var(--text-strong); background: var(--blue-pale); border-bottom: 1px solid var(--gray-mid); }
+
+.field label { display: block; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-strong); margin-bottom: 6px; }
+input[type="search"] { height: 40px; padding: 0 12px; border: 1px solid var(--gray-mid); border-radius: 8px; background: var(--white); color: var(--text); font: inherit; font-size: 14px; outline: none; transition: border-color .15s; min-width: 200px; }
+input[type="search"]:focus { border-color: var(--blue); }
+input[type="search"]::placeholder { color: var(--text-muted); }
+
+.field-inline { min-width: 200px; }
+.field-combobox { position: relative; min-width: 250px; }
+.field-combobox.field-compact { min-width: 120px; }
+.combobox-trigger { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--gray-mid); border-radius: 8px; background: var(--white); color: var(--text); font: inherit; font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.combobox-trigger:hover, .combobox-trigger.open { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0, 91, 172, .1); }
+.combobox-count { flex-shrink: 0; padding: 3px 8px; border-radius: 999px; background: var(--blue-pale); color: var(--blue-dark); font-size: 12px; font-weight: 800; }
+.combobox-panel { position: absolute; top: calc(100% + 8px); right: 0; width: min(360px, 80vw); padding: 12px; border: 1px solid var(--gray-mid); border-radius: 12px; background: var(--white); box-shadow: var(--shadow-lg); z-index: 40; }
+.combobox-search { width: 100%; margin-bottom: 8px; min-width: 0 !important; }
+.combobox-meta { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
+.combobox-list { max-height: min(420px, 60vh); overflow-y: auto; display: grid; gap: 4px; padding-right: 4px; }
+.combobox-option { width: 100%; padding: 10px 12px; border: none; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: background .15s, color .15s; }
+.combobox-option:hover, .combobox-option.selected { background: var(--blue-pale); color: var(--blue-dark); font-weight: 600; }
+.combobox-empty { padding: 12px; color: var(--text-muted); font-size: 13px; text-align: center; }
+
+.table-wrap { overflow-x: auto; }
+.table-wrap.resumo {
+  display: flex;
+  justify-content: center;
+  padding: 0 24px;
+}
+.table-wrap.resumo table { width: 100%; max-width: 1100px; min-width: 720px; table-layout: fixed; }
+.table-wrap.resumo th, .table-wrap.resumo td { width: 15%; }
+.table-wrap.resumo th.td-serie, .table-wrap.resumo td.td-serie { width: 10%; }
+table { width: 100%; min-width: 720px; border-collapse: collapse; }
+th, td { white-space: nowrap; }
+thead th {
+  background: var(--blue-mid); color: var(--blue-dark);
+  font-size: 12px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 12px 14px; text-align: left; white-space: nowrap;
+  cursor: pointer; user-select: none; position: sticky; top: 0;
+}
+thead th[data-sortable="false"] { cursor: default; }
+thead th.active-sort { color: var(--orange); }
+tbody td { padding: 10px 14px; border-top: 1px solid var(--gray-mid); white-space: nowrap; font-size: 14px; color: var(--text-strong); }
+tbody td.td-num { font-variant-numeric: tabular-nums; font-weight: 600; }
+tbody tr:hover { background: var(--blue-pale); }
+tbody tr[style*="cursor"] td.td-name::after { content: " ›"; color: var(--blue); font-weight: 800; }
+
+.td-name {
+  font-weight: 800;
+  color: var(--text-strong);
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.td-serie { font-weight: 700; color: var(--blue-dark); width: 70px; }
+thead th.td-serie { width: 70px; }
+.td-num { text-align: right !important; }
+thead th.td-num { text-align: right !important; }
+
+.row-total td {
+  background: var(--blue-pale);
+  border-top: 2px solid var(--blue);
+  font-weight: 900;
+  color: var(--blue-dark);
+}
+.row-total td.td-serie { color: var(--blue-dark); }
+.row-total:hover { background: var(--blue-pale) !important; }
+
+.pct-badge { display: inline-block; padding: 4px 10px; border-radius: 99px; font-weight: 900; font-size: 13px; color: var(--white); min-width: 62px; text-align: center; }
+.pct-good { background: var(--green); }
+.pct-mid  { background: var(--yellow); }
+.pct-low  { background: var(--red); }
+
+.notice { padding: 28px; text-align: center; color: var(--text-muted); font-size: 14px; font-weight: 500; }
+.loading-wrap { padding: 40px; text-align: center; color: var(--blue-dark); font-weight: 600; }
+.spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid var(--blue-pale); border-top-color: var(--blue); border-radius: 50%; animation: spin .7s linear infinite; margin-bottom: 10px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 1100px) { .cards { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .page { padding: 16px; }
+  .header-stamp { display: none; }
+  .field-combobox { min-width: 100%; }
+  .combobox-panel { left: 0; right: auto; width: 100%; }
+  .table-top { flex-direction: column; align-items: stretch; }
+  .table-filters { flex-direction: column; align-items: stretch; }
+  input[type="search"] { width: 100%; min-width: 0; }
+}
