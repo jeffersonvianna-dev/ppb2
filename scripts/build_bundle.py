@@ -224,10 +224,43 @@ def pct(num, den):
 SERIE_ORDER = {"4EF": 1, "5EF": 2, "6EF": 3, "7EF": 4, "8EF": 5, "9EF": 6,
                "1EM": 7, "2EM": 8, "3EM": 9}
 
+# ---------------------------------------- aplicação ACESSÍVEL (só numerador)
+# Provas realizadas da PP digital acessível, somadas aos LIDOS (NÃO ao esperado —
+# esses alunos já estão contados nas turmas regulares). Snapshot estático em
+# scripts/acessivel.json (regerar só quando vier base acessível nova). As turmas
+# acessíveis NÃO entram no drilldown de turmas (não casam por TurmaId), só elevam
+# o numerador nos agregados (summary/série/URE/escola, casando por escola_id/serie/ure).
+ACESS = ROOT / "scripts" / "acessivel.json"
+acc_total = {"d1": 0, "d2": 0}
+acc_serie, acc_ure, acc_escola = {}, {}, {}
+
+
+def _acc_add(dic, key, d1, d2):
+    if not key:
+        return
+    e = dic.setdefault(key, {"d1": 0, "d2": 0})
+    e["d1"] += d1
+    e["d2"] += d2
+
+
+if ACESS.exists():
+    acc_rows = json.loads(ACESS.read_text(encoding="utf-8"))
+    for r in acc_rows:
+        d1, d2 = int(r.get("d1", 0)), int(r.get("d2", 0))
+        acc_total["d1"] += d1
+        acc_total["d2"] += d2
+        _acc_add(acc_serie, r.get("serie"), d1, d2)
+        _acc_add(acc_ure, r.get("ure"), d1, d2)
+        _acc_add(acc_escola, r.get("escola_id"), d1, d2)
+    print(f"[acessível] {len(acc_rows):,} turmas | +D1 {acc_total['d1']:,} +D2 {acc_total['d2']:,} (só numerador)")
+
+
+ZERO = {"d1": 0, "d2": 0}
+
 # ----------------------------------------------------------------- summary
 tot_alunos = int(pt["alunos"].sum())
-tot_d1 = int(pt["lidos_d1"].sum())
-tot_d2 = int(pt["lidos_d2"].sum())
+tot_d1 = int(pt["lidos_d1"].sum()) + acc_total["d1"]
+tot_d2 = int(pt["lidos_d2"].sum()) + acc_total["d2"]
 summary = {
     "total_alunos": tot_alunos,
     "total_lidos_dia1": tot_d1,
@@ -240,13 +273,13 @@ summary = {
 resumo = []
 for serie, grp in pt[pt["serie"].notna()].groupby("serie"):
     a = int(grp["alunos"].sum())
+    ad = acc_serie.get(serie, ZERO)
+    l1 = int(grp["lidos_d1"].sum()) + ad["d1"]
+    l2 = int(grp["lidos_d2"].sum()) + ad["d2"]
     resumo.append({
         "serie": serie, "serie_order": SERIE_ORDER.get(serie, 99),
-        "total_alunos": a,
-        "lidos_dia1": int(grp["lidos_d1"].sum()),
-        "lidos_dia2": int(grp["lidos_d2"].sum()),
-        "perc_dia1": pct(int(grp["lidos_d1"].sum()), a),
-        "perc_dia2": pct(int(grp["lidos_d2"].sum()), a),
+        "total_alunos": a, "lidos_dia1": l1, "lidos_dia2": l2,
+        "perc_dia1": pct(l1, a), "perc_dia2": pct(l2, a),
     })
 resumo.sort(key=lambda r: r["serie_order"])
 
@@ -254,13 +287,15 @@ resumo.sort(key=lambda r: r["serie_order"])
 seduc = []
 for ure, grp in pt.groupby("ure"):
     a = int(grp["alunos"].sum())
+    ad = acc_ure.get(ure, ZERO)
+    l1 = int(grp["lidos_d1"].sum()) + ad["d1"]
+    l2 = int(grp["lidos_d2"].sum()) + ad["d2"]
     seduc.append({
         "ure": ure,
         "total_escolas": int(grp["escola_id"].nunique()),
         "total_turmas": int(grp["turma_id"].nunique()),
         "total_alunos": a,
-        "perc_dia1": pct(int(grp["lidos_d1"].sum()), a),
-        "perc_dia2": pct(int(grp["lidos_d2"].sum()), a),
+        "perc_dia1": pct(l1, a), "perc_dia2": pct(l2, a),
     })
 seduc.sort(key=lambda r: r["ure"])
 
@@ -268,12 +303,14 @@ seduc.sort(key=lambda r: r["ure"])
 escolas = []
 for (ure, escola_id), grp in pt.groupby(["ure", "escola_id"]):
     a = int(grp["alunos"].sum())
+    ad = acc_escola.get(escola_id, ZERO)
+    l1 = int(grp["lidos_d1"].sum()) + ad["d1"]
+    l2 = int(grp["lidos_d2"].sum()) + ad["d2"]
     escolas.append({
         "ure": ure, "escola_id": escola_id, "escola": grp["escola"].max(),
         "total_turmas": int(grp["turma_id"].nunique()),
         "total_alunos": a,
-        "perc_dia1": pct(int(grp["lidos_d1"].sum()), a),
-        "perc_dia2": pct(int(grp["lidos_d2"].sum()), a),
+        "perc_dia1": pct(l1, a), "perc_dia2": pct(l2, a),
     })
 escolas.sort(key=lambda r: (r["escola"] or ""))
 
