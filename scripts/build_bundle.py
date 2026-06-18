@@ -79,7 +79,8 @@ if not CSV_DIA1:
 
 # ---------------------------------------------------------------- carregar CSV
 RENAME = {
-    "URE": "ure", "Escola": "escola", "Turma": "turma",
+    "URE": "ure", "Municipio": "municipio", "Escola": "escola", "Turma": "turma",
+    "TurmaId": "turma_id_src",
     "Bimestre": "bimestre", "DIA_PROVA": "dia_prova",
     "Total_Alunos_Turma": "total_alunos_turma",
     "gabaritos_lidos_cmspp": "gabaritos_lidos_cmspp",
@@ -128,30 +129,52 @@ df["gabaritos_lidos_cmspp"] = pd.to_numeric(df["gabaritos_lidos_cmspp"], errors=
 df["dia_prova"] = df["dia_prova"].astype(int)
 df = df.dropna(subset=["ure", "escola", "turma"])
 
-# dedup (ure,escola,turma,dia_prova) — mantém a última
-key = ["ure", "escola", "turma", "dia_prova"]
-dups = int(df.duplicated(subset=key, keep=False).sum())
-if dups:
-    df = df.drop_duplicates(subset=key, keep="last")
-    print(f"[dedup] {dups:,} linhas duplicadas removidas -> {len(df):,}")
-
 
 def md5(*parts):
     return hashlib.md5("|".join(parts).encode("utf-8")).hexdigest()
 
 
-df["escola_id"] = [md5(u, e) for u, e in zip(df["ure"], df["escola"])]
-df["turma_id"] = [md5(u, e, t) for u, e, t in zip(df["ure"], df["escola"], df["turma"])]
+# Identidade da turma = TurmaId REAL do sistema (único) — evita fundir turmas/escolas
+# homônimas, que existem (ex.: 2 "1ª A - EM" na mesma escola com TurmaId diferente).
+# Escola = md5(URE|Municipio|Escola): não há código de escola na base; o Municipio
+# separa escolas homônimas dentro da mesma URE.
+mun = df["municipio"].fillna("") if "municipio" in df.columns else pd.Series("", index=df.index)
+df["escola_id"] = [md5(u, m, e) for u, m, e in zip(df["ure"], mun, df["escola"])]
+# chave por NOME só para casar com o universo do B1 no fallback (universe.json usa md5(URE|Escola|Turma))
+df["_namekey"] = [md5(u, e, t) for u, e, t in zip(df["ure"], df["escola"], df["turma"])]
+if "turma_id_src" in df.columns:
+    tid = pd.to_numeric(df["turma_id_src"], errors="coerce")
+    df["turma_id"] = tid.apply(lambda v: str(int(v)) if pd.notna(v) else None)
+    faltam = df["turma_id"].isna()
+    if faltam.any():  # fallback raro: TurmaId nulo -> usa md5 dos nomes
+        df.loc[faltam, "turma_id"] = df.loc[faltam, "_namekey"]
+        print(f"[aviso] {int(faltam.sum()):,} linhas sem TurmaId -> usei md5 dos nomes")
+else:
+    df["turma_id"] = df["_namekey"]
+
+# dedup por (turma_id, dia_prova) — NÃO por nome, p/ não fundir homônimas
+key = ["turma_id", "dia_prova"]
+dups = int(df.duplicated(subset=key, keep=False).sum())
+if dups:
+    df = df.drop_duplicates(subset=key, keep="last")
+    print(f"[dedup] {dups:,} linhas duplicadas removidas -> {len(df):,}")
+
 df["_alunos"] = df["total_alunos_turma"].fillna(0).astype(int)
 lidos = df["gabaritos_lidos_cmspp"].fillna(0).astype(int)
 df["_l1"] = lidos.where(df["dia_prova"] == 1, 0)
 df["_l2"] = lidos.where(df["dia_prova"] == 2, 0)
 
 # --------------------------------------------------- agregação por turma (B2)
-por = df.groupby(["ure", "escola_id", "turma_id"], sort=False).agg(
+# Agrupa SÓ por turma_id (TurmaId é único por turma). Não inclui escola_id na chave:
+# evita que variações de grafia de escola/município entre os arquivos do dia 1 e dia 2
+# quebrem a mesma turma em dois grupos (e separem D1 de D2).
+por = df.groupby("turma_id", sort=False).agg(
+    ure=("ure", "max"),
+    escola_id=("escola_id", "max"),
     escola=("escola", "max"),
     turma=("turma", "max"),
     serie=("serie", "max"),
+    namekey=("_namekey", "max"),     # p/ casar com B1 no fallback
     alunos=("_alunos", "max"),       # mesmo aluno serve aos dois dias
     lidos_d1=("_l1", "sum"),
     lidos_d2=("_l2", "sum"),
@@ -167,11 +190,11 @@ if base_completa:
     print(f"[modo] BASE COMPLETA — denominador 100% do B2 ({len(pt):,} turmas)")
 else:
     # fallback híbrido: universo do B1 + leituras/esperado do B2 onde houver
-    uni_ids = {u["turma_id"] for u in universe}
+    uni_ids = {u["turma_id"] for u in universe}   # ids do B1 = md5(URE|Escola|Turma)
     by_id = {u["turma_id"]: {**u, "lidos_d1": 0, "lidos_d2": 0} for u in universe}
     for r in por.itertuples(index=False):
-        if r.turma_id in by_id:
-            row = by_id[r.turma_id]
+        if r.namekey in by_id:   # casa pelo nome (esquema de id do B1)
+            row = by_id[r.namekey]
             row["alunos"] = int(r.alunos) or row["alunos"]
             row["lidos_d1"], row["lidos_d2"] = int(r.lidos_d1), int(r.lidos_d2)
             if not row.get("serie") and pd.notna(r.serie):
@@ -184,7 +207,7 @@ else:
                 "alunos": int(r.alunos), "lidos_d1": int(r.lidos_d1), "lidos_d2": int(r.lidos_d2),
             }
     pt = pd.DataFrame(list(by_id.values()))
-    b2_only = sum(1 for r in por.itertuples(index=False) if r.turma_id not in uni_ids)
+    b2_only = sum(1 for r in por.itertuples(index=False) if r.namekey not in uni_ids)
     print(f"[modo] HÍBRIDO (base só com ativas) — B2 {len(por):,} "
           f"(+{b2_only} fora do universo) sobre universo B1 {len(universe):,}")
 
