@@ -47,9 +47,26 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOADS = Path(os.path.expanduser("~")) / "Downloads"
 
 
+# colunas obrigatórias do relatório de cartões (ignora outros exports, ex.:
+# "Provas Realizadas / Média de Nota", que tem outro layout e cai em Downloads)
+REQUIRED_COLS = ("DIA_PROVA", "gabaritos_lidos_cmspp")
+
+
+def _has_required(path):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            head = fh.readline()
+        return all(c in head for c in REQUIRED_COLS)
+    except Exception:
+        return False
+
+
 def latest(pattern):
-    hits = sorted(glob.glob(str(DOWNLOADS / pattern)), key=os.path.getmtime)
-    return hits[-1] if hits else None
+    hits = sorted(glob.glob(str(DOWNLOADS / pattern)), key=os.path.getmtime, reverse=True)
+    for h in hits:                       # mais recente que tenha o layout de cartões
+        if _has_required(h):
+            return h
+    return None
 
 
 CSV_DIA1 = os.environ.get("CSV_DIA1") or latest("*Dia 1*.csv")
