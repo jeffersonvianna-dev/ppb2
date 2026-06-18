@@ -217,7 +217,8 @@ pt["lidos_d2"] = pt["lidos_d2"].astype(int)
 
 
 def pct(num, den):
-    return round(100.0 * num / den, 2) if den else 0
+    # trava em 100% (há turmas com matrícula subdimensionada na fonte que leem >100%)
+    return round(min(100.0, 100.0 * num / den), 2) if den else 0
 
 
 SERIE_ORDER = {"4EF": 1, "5EF": 2, "6EF": 3, "7EF": 4, "8EF": 5, "9EF": 6,
