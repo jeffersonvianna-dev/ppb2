@@ -77,6 +77,20 @@ if not CSV_DIA1:
     print("ERRO: nenhum CSV 'Dia 1' encontrado (defina CSV_DIA1)", file=sys.stderr)
     sys.exit(1)
 
+# Escolas a EXCLUIR do painel (por escola_id = md5(URE|Municipio|Escola)).
+# Pedido Jeff 18/jun: escolas indígenas (aldeias) da URE REGISTRO.
+EXCLUDE_ESCOLAS = {
+    "be457e56a20a368dde16cb5b25a7945f",  # ALDEIA RIO BRANCO II (REGISTRO/CANANEIA)
+    "faab8544d53092ac9c922e9a65189587",  # ALDEIA SANTA CRUZ (REGISTRO/CANANEIA)
+    "781d8037ae168ee1e5460d55e63a819f",  # E.E.I. ALDEIA MA'ENDU'A PORÃ (REGISTRO/CANANEIA)
+    "5bf9f97a98cfdd97127d9b2c935c15d6",  # ALDEIA PINDO TY (REGISTRO/PARIQUERA-ACU)
+    "20f1c42063b6572a9bb2050a6b49718a",  # ALDEIA TAQUARI (REGISTRO/ELDORADO)
+    "cb58b0f6848ce45db493bcced1f7b316",  # ALDEIA PEGUAO TY (REGISTRO/SETE BARRAS)
+    "73ae3ff2c2715542e9e782608c783320",  # ALDEIA TAKUARI TY (REGISTRO/CANANEIA)
+    "a146af0dbff9d4824751a5647d90a8de",  # ALDEIA ARACA MIRIM (REGISTRO/PARIQUERA-ACU)
+    "22e97f4e0bd4290c24c287db4225d8f1",  # ALDEIA ITAPU MIRIM (REGISTRO/REGISTRO)
+}
+
 # ---------------------------------------------------------------- carregar CSV
 RENAME = {
     "URE": "ure", "Municipio": "municipio", "Escola": "escola", "Turma": "turma",
@@ -140,6 +154,11 @@ def md5(*parts):
 # separa escolas homônimas dentro da mesma URE.
 mun = df["municipio"].fillna("") if "municipio" in df.columns else pd.Series("", index=df.index)
 df["escola_id"] = [md5(u, m, e) for u, m, e in zip(df["ure"], mun, df["escola"])]
+if EXCLUDE_ESCOLAS:
+    n0 = len(df)
+    df = df[~df["escola_id"].isin(EXCLUDE_ESCOLAS)].copy()
+    if len(df) != n0:
+        print(f"[excluir] {n0 - len(df):,} linhas de escola(s) na lista de exclusão removidas")
 # chave por NOME só para casar com o universo do B1 no fallback (universe.json usa md5(URE|Escola|Turma))
 df["_namekey"] = [md5(u, e, t) for u, e, t in zip(df["ure"], df["escola"], df["turma"])]
 if "turma_id_src" in df.columns:
