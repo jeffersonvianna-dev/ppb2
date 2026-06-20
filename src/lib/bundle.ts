@@ -9,8 +9,11 @@ export interface SummaryRow {
   total_alunos: number;
   total_lidos_dia1: number;
   total_lidos_dia2: number;
+  total_lidos_dia3: number;
+  total_alunos_dia3: number;
   perc_dia1: number;
   perc_dia2: number;
+  perc_dia3: number | null;
 }
 
 export interface ResumoRow {
@@ -19,8 +22,10 @@ export interface ResumoRow {
   total_alunos: number;
   lidos_dia1: number;
   lidos_dia2: number;
+  lidos_dia3: number | null;
   perc_dia1: number;
   perc_dia2: number;
+  perc_dia3: number | null;
 }
 
 export interface SeducRow {
@@ -30,6 +35,7 @@ export interface SeducRow {
   total_alunos: number;
   perc_dia1: number;
   perc_dia2: number;
+  perc_dia3: number | null;
 }
 
 export interface EscolaRow {
@@ -40,6 +46,7 @@ export interface EscolaRow {
   total_alunos: number;
   perc_dia1: number;
   perc_dia2: number;
+  perc_dia3: number | null;
 }
 
 export interface TurmaRow {
@@ -50,6 +57,7 @@ export interface TurmaRow {
   total_alunos: number;
   perc_dia1: number;
   perc_dia2: number;
+  perc_dia3: number | null;
 }
 
 export interface Bundle {

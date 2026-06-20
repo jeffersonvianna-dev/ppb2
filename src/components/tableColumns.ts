@@ -16,6 +16,8 @@ export const COLUMNS: Record<ActiveView, ColumnDef[]> = {
     { key: 'perc_dia1', label: '% Dia 1', sortable: true, cls: 'td-num', kind: 'pct' },
     { key: 'lidos_dia2', label: 'Qtd Dia 2', sortable: true, cls: 'td-num', kind: 'intAbbr' },
     { key: 'perc_dia2', label: '% Dia 2', sortable: true, cls: 'td-num', kind: 'pct' },
+    { key: 'lidos_dia3', label: 'Qtd Dia 3', sortable: true, cls: 'td-num', kind: 'intAbbr' },
+    { key: 'perc_dia3', label: '% Dia 3', sortable: true, cls: 'td-num', kind: 'pct' },
   ],
   seduc: [
     { key: 'ure', label: 'URE', sortable: true, cls: 'td-name', kind: 'text' },
@@ -24,6 +26,7 @@ export const COLUMNS: Record<ActiveView, ColumnDef[]> = {
     { key: 'total_alunos', label: 'Estudantes', sortable: true, cls: 'td-num', kind: 'int' },
     { key: 'perc_dia1', label: '% Dia 1', sortable: true, cls: 'td-num', kind: 'pct' },
     { key: 'perc_dia2', label: '% Dia 2', sortable: true, cls: 'td-num', kind: 'pct' },
+    { key: 'perc_dia3', label: '% Dia 3', sortable: true, cls: 'td-num', kind: 'pct' },
   ],
   ure: [
     { key: 'escola', label: 'Escola', sortable: true, cls: 'td-name', kind: 'text' },
@@ -31,6 +34,7 @@ export const COLUMNS: Record<ActiveView, ColumnDef[]> = {
     { key: 'total_alunos', label: 'Estudantes', sortable: true, cls: 'td-num', kind: 'int' },
     { key: 'perc_dia1', label: '% Dia 1', sortable: true, cls: 'td-num', kind: 'pct' },
     { key: 'perc_dia2', label: '% Dia 2', sortable: true, cls: 'td-num', kind: 'pct' },
+    { key: 'perc_dia3', label: '% Dia 3', sortable: true, cls: 'td-num', kind: 'pct' },
   ],
   escola: [
     { key: 'turma', label: 'Turma', sortable: true, cls: 'td-name', kind: 'text' },
@@ -38,5 +42,6 @@ export const COLUMNS: Record<ActiveView, ColumnDef[]> = {
     { key: 'total_alunos', label: 'Estudantes', sortable: true, cls: 'td-num', kind: 'int' },
     { key: 'perc_dia1', label: '% Dia 1', sortable: true, cls: 'td-num', kind: 'pct' },
     { key: 'perc_dia2', label: '% Dia 2', sortable: true, cls: 'td-num', kind: 'pct' },
+    { key: 'perc_dia3', label: '% Dia 3', sortable: true, cls: 'td-num', kind: 'pct' },
   ],
 };

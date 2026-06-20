@@ -50,27 +50,31 @@ DOWNLOADS = Path(os.path.expanduser("~")) / "Downloads"
 # colunas obrigatórias do relatório de cartões (ignora outros exports, ex.:
 # "Provas Realizadas / Média de Nota", que tem outro layout e cai em Downloads)
 REQUIRED_COLS = ("DIA_PROVA", "gabaritos_lidos_cmspp")
+DIA3_COLS = ("TurmaId", "Provas_Realizadas")  # layout do Dia 3 (prova digital)
 
 
-def _has_required(path):
+def _has_cols(path, cols):
     try:
         with open(path, encoding="utf-8") as fh:
             head = fh.readline()
-        return all(c in head for c in REQUIRED_COLS)
+        return all(c in head for c in cols)
     except Exception:
         return False
 
 
-def latest(pattern):
+def latest(pattern, cols=REQUIRED_COLS):
     hits = sorted(glob.glob(str(DOWNLOADS / pattern)), key=os.path.getmtime, reverse=True)
-    for h in hits:                       # mais recente que tenha o layout de cartões
-        if _has_required(h):
+    for h in hits:                       # mais recente com o layout pedido
+        if _has_cols(h, cols):
             return h
     return None
 
 
 CSV_DIA1 = os.environ.get("CSV_DIA1") or latest("*Dia 1*.csv")
 CSV_DIA2 = os.environ.get("CSV_DIA2") or latest("*Dia 2*.csv")
+# Dia 3 = prova digital (só 2EM/3EM). Arquivo "Dados Completos-AAAA-MM-DD.csv"
+# (sem "Dia" no nome), layout Provas_Realizadas. Casa por TurmaId com a base regular.
+CSV_DIA3 = os.environ.get("CSV_DIA3") or latest("Dados Completos-*.csv", DIA3_COLS)
 STAMP_BRT = os.environ.get("STAMP_BRT")  # ex.: "2026-06-16 17:00"
 
 if not CSV_DIA1:
@@ -234,10 +238,34 @@ pt["alunos"] = pt["alunos"].fillna(0).astype(int)
 pt["lidos_d1"] = pt["lidos_d1"].astype(int)
 pt["lidos_d2"] = pt["lidos_d2"].astype(int)
 
+# ------------------------------------------------ Dia 3 (prova digital, 2EM/3EM)
+# Casa por TurmaId com a base regular (100% de overlap). Só 2EM/3EM têm Dia 3 —
+# nas demais séries o % Dia 3 fica nulo (N/A). Denominador = alunos das turmas de Dia 3.
+d3_reads, d3_ids = {}, set()
+if CSV_DIA3 and os.path.exists(CSV_DIA3):
+    d3 = pd.read_csv(CSV_DIA3, encoding="utf-8", low_memory=False)
+    d3["tid"] = pd.to_numeric(d3["TurmaId"], errors="coerce")
+    d3 = d3.dropna(subset=["tid"]).copy()
+    d3["tid"] = d3["tid"].astype("int64").astype(str)
+    d3["pr"] = pd.to_numeric(d3["Provas_Realizadas"], errors="coerce").fillna(0).astype(int)
+    d3 = d3.drop_duplicates(subset=["tid"], keep="last")
+    d3_reads = dict(zip(d3["tid"], d3["pr"]))
+    d3_ids = set(d3_reads)
+    print(f"[dia3] {os.path.basename(CSV_DIA3)}: {len(d3_ids):,} turmas | provas={sum(d3_reads.values()):,}")
+
+pt["lidos_d3"] = pt["turma_id"].map(d3_reads).fillna(0).astype(int)
+pt["tem_d3"] = pt["turma_id"].isin(d3_ids)
+pt["alunos_d3"] = pt["alunos"].where(pt["tem_d3"], 0)
+
 
 def pct(num, den):
     # trava em 100% (há turmas com matrícula subdimensionada na fonte que leem >100%)
     return round(min(100.0, 100.0 * num / den), 2) if den else 0
+
+
+def pct_n(num, den):
+    # como pct, mas retorna None (N/A) quando não há denominador (ex.: série sem Dia 3)
+    return round(min(100.0, 100.0 * num / den), 2) if den else None
 
 
 SERIE_ORDER = {"4EF": 1, "5EF": 2, "6EF": 3, "7EF": 4, "8EF": 5, "9EF": 6,
@@ -247,25 +275,33 @@ SERIE_ORDER = {"4EF": 1, "5EF": 2, "6EF": 3, "7EF": 4, "8EF": 5, "9EF": 6,
 tot_alunos = int(pt["alunos"].sum())
 tot_d1 = int(pt["lidos_d1"].sum())
 tot_d2 = int(pt["lidos_d2"].sum())
+tot_d3 = int(pt["lidos_d3"].sum())
+tot_a3 = int(pt["alunos_d3"].sum())
 summary = {
     "total_alunos": tot_alunos,
     "total_lidos_dia1": tot_d1,
     "total_lidos_dia2": tot_d2,
+    "total_lidos_dia3": tot_d3,
+    "total_alunos_dia3": tot_a3,
     "perc_dia1": pct(tot_d1, tot_alunos),
     "perc_dia2": pct(tot_d2, tot_alunos),
+    "perc_dia3": pct_n(tot_d3, tot_a3),
 }
 
 # --------------------------------------------------------- resumo por série
 resumo = []
 for serie, grp in pt[pt["serie"].notna()].groupby("serie"):
     a = int(grp["alunos"].sum())
+    l3, a3 = int(grp["lidos_d3"].sum()), int(grp["alunos_d3"].sum())
     resumo.append({
         "serie": serie, "serie_order": SERIE_ORDER.get(serie, 99),
         "total_alunos": a,
         "lidos_dia1": int(grp["lidos_d1"].sum()),
         "lidos_dia2": int(grp["lidos_d2"].sum()),
+        "lidos_dia3": l3 if a3 else None,
         "perc_dia1": pct(int(grp["lidos_d1"].sum()), a),
         "perc_dia2": pct(int(grp["lidos_d2"].sum()), a),
+        "perc_dia3": pct_n(l3, a3),
     })
 resumo.sort(key=lambda r: r["serie_order"])
 
@@ -280,6 +316,7 @@ for ure, grp in pt.groupby("ure"):
         "total_alunos": a,
         "perc_dia1": pct(int(grp["lidos_d1"].sum()), a),
         "perc_dia2": pct(int(grp["lidos_d2"].sum()), a),
+        "perc_dia3": pct_n(int(grp["lidos_d3"].sum()), int(grp["alunos_d3"].sum())),
     })
 seduc.sort(key=lambda r: r["ure"])
 
@@ -293,6 +330,7 @@ for (ure, escola_id), grp in pt.groupby(["ure", "escola_id"]):
         "total_alunos": a,
         "perc_dia1": pct(int(grp["lidos_d1"].sum()), a),
         "perc_dia2": pct(int(grp["lidos_d2"].sum()), a),
+        "perc_dia3": pct_n(int(grp["lidos_d3"].sum()), int(grp["alunos_d3"].sum())),
     })
 escolas.sort(key=lambda r: (r["escola"] or ""))
 
@@ -305,6 +343,7 @@ for r in pt.sort_values("turma").itertuples(index=False):
         "total_alunos": int(r.alunos),
         "perc_dia1": pct(int(r.lidos_d1), int(r.alunos)),
         "perc_dia2": pct(int(r.lidos_d2), int(r.alunos)),
+        "perc_dia3": pct_n(int(r.lidos_d3), int(r.alunos)) if r.tem_d3 else None,
     })
 
 # ----------------------------------------------------------------- timestamp
@@ -326,4 +365,5 @@ size_turmas_mb = OUT_TURMAS.stat().st_size / 1024 / 1024
 print(f"\nOK — bundle.json {size_kb:.0f} KB | turmas.json {size_turmas_mb:.2f} MB "
       f"({len(turmas):,} turmas, {len(escolas):,} escolas, {len(seduc)} UREs) em {time.time()-t0:.1f}s")
 print(f"   atualizacao={atualizacao_iso}")
-print(f"   total esperado={tot_alunos:,}  lidos D1={tot_d1:,}  %D1={summary['perc_dia1']}  %D2={summary['perc_dia2']}")
+print(f"   total esperado={tot_alunos:,}  %D1={summary['perc_dia1']}  %D2={summary['perc_dia2']}  "
+      f"%D3={summary['perc_dia3']} (D3 esperado={tot_a3:,}, lidos={tot_d3:,})")

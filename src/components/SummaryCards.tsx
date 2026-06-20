@@ -32,6 +32,11 @@ export default function SummaryCards({ summary, isLoading }: Props) {
             <div className="card-value">{fmtPct(summary.perc_dia2)}</div>
             <div className="card-meta">Cartões lidos / total de estudantes</div>
           </div>
+          <div className="card">
+            <div className="card-label">% Dia 3</div>
+            <div className="card-value">{summary.perc_dia3 == null ? '—' : fmtPct(summary.perc_dia3)}</div>
+            <div className="card-meta">Prova digital — 2ª e 3ª série EM</div>
+          </div>
         </>
       )}
     </div>
