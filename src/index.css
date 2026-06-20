@@ -78,8 +78,8 @@ input[type="search"]::placeholder { color: var(--text-muted); }
   justify-content: center;
   padding: 0 24px;
 }
-.table-wrap.resumo table { width: 100%; max-width: 1100px; min-width: 720px; table-layout: fixed; }
-.table-wrap.resumo th, .table-wrap.resumo td { width: 15%; }
+.table-wrap.resumo table { width: 100%; max-width: 1180px; min-width: 760px; table-layout: fixed; }
+.table-wrap.resumo th, .table-wrap.resumo td { width: 12.85%; }
 .table-wrap.resumo th.td-serie, .table-wrap.resumo td.td-serie { width: 10%; }
 table { width: 100%; min-width: 720px; border-collapse: collapse; }
 th, td { white-space: nowrap; }
@@ -107,6 +107,7 @@ tbody tr[style*="cursor"] td.td-name::after { content: " ›"; color: var(--blue
 thead th.td-serie { width: 70px; }
 .td-num { text-align: right !important; }
 thead th.td-num { text-align: right !important; }
+.td-pct, thead th.td-pct { text-align: center !important; }
 
 .row-total td {
   background: var(--blue-pale);
