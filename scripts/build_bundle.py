@@ -241,6 +241,10 @@ pt["lidos_d2"] = pt["lidos_d2"].astype(int)
 # ------------------------------------------------ Dia 3 (prova digital, 2EM/3EM)
 # Casa por TurmaId com a base regular (100% de overlap). Só 2EM/3EM têm Dia 3 —
 # nas demais séries o % Dia 3 fica nulo (N/A). Denominador = alunos das turmas de Dia 3.
+# O Dia 3 é estático (prova digital, plateaua). Persistimos num snapshot no repo
+# (scripts/dia3.json) para não sumir quando vier só Dia 1/Dia 2: usa o CSV quando
+# presente (e atualiza o snapshot); senão cai no snapshot.
+DIA3_SNAP = ROOT / "scripts" / "dia3.json"
 d3_reads, d3_ids = {}, set()
 if CSV_DIA3 and os.path.exists(CSV_DIA3):
     d3 = pd.read_csv(CSV_DIA3, encoding="utf-8", low_memory=False)
@@ -250,8 +254,12 @@ if CSV_DIA3 and os.path.exists(CSV_DIA3):
     d3["pr"] = pd.to_numeric(d3["Provas_Realizadas"], errors="coerce").fillna(0).astype(int)
     d3 = d3.drop_duplicates(subset=["tid"], keep="last")
     d3_reads = dict(zip(d3["tid"], d3["pr"]))
-    d3_ids = set(d3_reads)
-    print(f"[dia3] {os.path.basename(CSV_DIA3)}: {len(d3_ids):,} turmas | provas={sum(d3_reads.values()):,}")
+    DIA3_SNAP.write_text(json.dumps(d3_reads, separators=(",", ":")), encoding="utf-8")
+    print(f"[dia3] {os.path.basename(CSV_DIA3)}: {len(d3_reads):,} turmas | provas={sum(d3_reads.values()):,} (snapshot atualizado)")
+elif DIA3_SNAP.exists():
+    d3_reads = {k: int(v) for k, v in json.loads(DIA3_SNAP.read_text(encoding="utf-8")).items()}
+    print(f"[dia3] sem CSV novo — usando snapshot dia3.json: {len(d3_reads):,} turmas | provas={sum(d3_reads.values()):,}")
+d3_ids = set(d3_reads)
 
 pt["lidos_d3"] = pt["turma_id"].map(d3_reads).fillna(0).astype(int)
 pt["tem_d3"] = pt["turma_id"].isin(d3_ids)
