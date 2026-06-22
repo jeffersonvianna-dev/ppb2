@@ -75,6 +75,10 @@ CSV_DIA2 = os.environ.get("CSV_DIA2") or latest("*Dia 2*.csv")
 # Dia 3 = prova digital (só 2EM/3EM). Arquivo "Dados Completos-AAAA-MM-DD.csv"
 # (sem "Dia" no nome), layout Provas_Realizadas. Casa por TurmaId com a base regular.
 CSV_DIA3 = os.environ.get("CSV_DIA3") or latest("Dados Completos-*.csv", DIA3_COLS)
+# Acessível (prova acessibilizada): layout Provas_Realizadas COM "Dia N" no nome
+# (ex.: "Dados Completos  Dia 1-...(2).csv"). Casa nas turmas REGULARES via crosswalk.
+CSV_ACC1 = os.environ.get("CSV_ACC1") or latest("*Dia 1*.csv", DIA3_COLS)
+CSV_ACC2 = os.environ.get("CSV_ACC2") or latest("*Dia 2*.csv", DIA3_COLS)
 STAMP_BRT = os.environ.get("STAMP_BRT")  # ex.: "2026-06-16 17:00"
 
 if not CSV_DIA1:
@@ -264,6 +268,52 @@ d3_ids = set(d3_reads)
 pt["lidos_d3"] = pt["turma_id"].map(d3_reads).fillna(0).astype(int)
 pt["tem_d3"] = pt["turma_id"].isin(d3_ids)
 pt["alunos_d3"] = pt["alunos"].where(pt["tem_d3"], 0)
+
+# ------------------------------ Acessível (SÓ NUMERADOR, por turma regular)
+# Provas da prova ACESSIBILIZADA somadas aos lidos da TURMA REGULAR do estudante,
+# via crosswalk (cd_turma_cmsp -> cd_turma_regular = TurmaId regular; mapa 1:1).
+# Não mexe no denominador (esses alunos já estão na matrícula da turma regular).
+# Snapshot persistente: usa os CSVs quando presentes (e atualiza), senão cai no snapshot.
+CW_SNAP = ROOT / "scripts" / "crosswalk_acessivel.json"
+ACC_SNAP = ROOT / "scripts" / "acessivel_d12.json"
+_cw = json.loads(CW_SNAP.read_text(encoding="utf-8")) if CW_SNAP.exists() else {}
+
+
+def _load_acc(path):
+    out = {}
+    if not (path and os.path.exists(path) and _cw):
+        return out
+    a = pd.read_csv(path, encoding="utf-8", low_memory=False)
+    a["tid"] = pd.to_numeric(a["TurmaId"], errors="coerce")
+    a = a.dropna(subset=["tid"]).copy()
+    a["tid"] = a["tid"].astype("int64").astype(str)
+    a["pr"] = pd.to_numeric(a["Provas_Realizadas"], errors="coerce").fillna(0).astype(int)
+    a = a.drop_duplicates(subset=["tid"], keep="last")
+    for tid, pr in zip(a["tid"], a["pr"]):
+        reg = _cw.get(tid)
+        if reg:
+            out[reg] = out.get(reg, 0) + int(pr)
+    return out
+
+
+acc_d1 = _load_acc(CSV_ACC1)
+acc_d2 = _load_acc(CSV_ACC2)
+if acc_d1 or acc_d2:
+    ACC_SNAP.write_text(json.dumps({"d1": acc_d1, "d2": acc_d2}, separators=(",", ":")), encoding="utf-8")
+    print(f"[acessível] D1 +{sum(acc_d1.values()):,} ({len(acc_d1):,} turmas) | D2 +{sum(acc_d2.values()):,} (snapshot atualizado)")
+elif ACC_SNAP.exists():
+    _s = json.loads(ACC_SNAP.read_text(encoding="utf-8"))
+    acc_d1 = {k: int(v) for k, v in _s.get("d1", {}).items()}
+    acc_d2 = {k: int(v) for k, v in _s.get("d2", {}).items()}
+    print(f"[acessível] sem CSV novo — snapshot: D1 +{sum(acc_d1.values()):,} | D2 +{sum(acc_d2.values()):,}")
+
+pt["lidos_d1"] = pt["lidos_d1"] + pt["turma_id"].map(acc_d1).fillna(0).astype(int)
+pt["lidos_d2"] = pt["lidos_d2"] + pt["turma_id"].map(acc_d2).fillna(0).astype(int)
+
+# 🔒 TETO 100%: nenhuma turma pode ter mais lidos que alunos → garante %<=100 em TODOS
+# os níveis (turma/escola/URE/série/summary), já que somatório de min(lidos,alunos) <= somatório alunos.
+for _c in ("lidos_d1", "lidos_d2", "lidos_d3"):
+    pt[_c] = pt[[_c, "alunos"]].min(axis=1).astype(int)
 
 
 def pct(num, den):
