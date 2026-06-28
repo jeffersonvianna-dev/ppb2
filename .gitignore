@@ -16,3 +16,6 @@ turmas.csv
 
 # intermediarios de ETL — app consome so public/ (auditoria 2026-06-28)
 scripts/*.json
+
+.env*
+.mcp.json
